@@ -1,0 +1,7 @@
+Sample	Treatment	Colony
+C1A	Before	C1
+C3A	Before	C3
+C5A	Before	C5
+C1D	After	C1
+C3D	After	C3
+C5D	After	C5
