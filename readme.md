@@ -2,7 +2,7 @@
 
 ## Overview
 
-This repository contains the R scripts, input and output files used to perform differential gene expression analysis of RNA-seq data from bee brains collected before and after fungicide and pesticide application.
+This repository contains the R scripts, input and output files used to perform differential gene expression analysis of RNA-seq data and GO enrichment analysis from bee brains collected before and after fungicide and pesticide application.
 
 The analysis was performed using **DESeq2**, accounting for the paired experimental design in which the same independent colonies were sampled at both time points. The main objective was to identify genes showing changes in expression between samples collected before and after the application.
 
