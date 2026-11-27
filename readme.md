@@ -39,9 +39,9 @@ Because the same colonies were sampled before and after treatment, colony identi
 
 - **Raw_counts.txt:** Gene-level raw read count matrix. Rows represent genes and columns represent RNA-seq samples.
 - **experiment.txt:** Sample metadata, including sample identifiers, treatment condition, and colony identity.
-- **DESeq2_analysis.R:** R script used to perform differential gene expression analysis.
+- **Deseq2_analysis.R:** R script used to perform differential gene expression analysis.
 - **Deseq2_statistics.txt:** Table with the results of the differential expression analysis.
-- **Rlog_values:** Table with the rlog-transformed values.
+- **RLoG_Transformed_values:** Table with the rlog-transformed values.
 - **README.md:** Repository documentation.
 
 ## Input Files
@@ -104,7 +104,7 @@ The analysis included the following steps:
 
 Genes with an adjusted p-value (`padj`) below 0.05 were considered differentially expressed.
 
-Positive log2 fold-change values indicate higher expression in the After condition, whereas negative values indicate higher expression in the Before condition.
+Positive log2 fold-change values indicate higher expression after treatment, whereas negative values indicate higher expression before treatment.
 
 ## Requirements
 
