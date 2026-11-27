@@ -1,58 +1,109 @@
 
+# ============================================================
+# RNA-seq differential expression analysis
+# DESeq2 and apeglm
+#
+# Experimental comparison: After vs Before
+# Experimental design: ~ Colony + Treatment
+#
+# Differential expression significance:
+# Wald test with Benjamini-Hochberg correction
+# DEG threshold: adjusted p-value < 0.05
+#
+# Log2 fold-change estimation:
+# apeglm shrinkage without adaptive prior estimation
+# (apeAdapt = FALSE)
+# ============================================================
+
+
+# ============================================================
+# 0. LOAD PACKAGES AND CONFIGURE ANALYSIS
+# ============================================================
+
 library(DESeq2)
-library(pheatmap)
-library(RColorBrewer)
-library(ggplot2)
-library(ggrepel)
 
-# =========================================================
-# CONFIGURACION GENERAL
-# =========================================================
+# Input and output directories
+input_dir <- "input"
+output_dir <- "output"
 
-base_dir <- "/home/josemlatorre/Documentos/Ivi_SClaudio/"
+dir.create(
+  output_dir,
+  showWarnings = FALSE,
+  recursive = TRUE
+)
 
+# Statistical significance threshold
 alpha <- 0.05
-dec_out <- ","
 
-# =========================================================
-# 1. IMPORTAR COUNTS
-# =========================================================
+# ============================================================
+# 1. IMPORT RAW COUNTS
+# ============================================================
 
-Counts <- read.delim(
-  paste0(base_dir, "Raw_counts.txt"),
+counts_data <- read.delim(
+  file.path(input_dir, "Raw_counts.txt"),
   sep = "\t",
   header = TRUE,
   check.names = FALSE
 )
 
-Counts_matrix <- data.matrix(Counts[, 2:ncol(Counts)])
-rownames(Counts_matrix) <- Counts[, 1]
+# Extract gene identifiers and count matrix
 
-# =========================================================
-# 2. IMPORTAR METADATA
-# =========================================================
+gene_ids <- counts_data[, 1]
+
+counts_matrix <- data.matrix(
+  counts_data[, 2:ncol(counts_data)]
+)
+
+rownames(counts_matrix) <- gene_ids
+
+# Check count matrix integrity
+
+stopifnot(!anyDuplicated(rownames(counts_matrix)))
+stopifnot(!anyDuplicated(colnames(counts_matrix)))
+stopifnot(all(is.finite(counts_matrix)))
+stopifnot(all(counts_matrix >= 0))
+stopifnot(all(counts_matrix == round(counts_matrix)))
+
+storage.mode(counts_matrix) <- "integer"
+
+
+# ============================================================
+# 2. IMPORT EXPERIMENTAL METADATA
+# ============================================================
 
 experiment <- read.delim(
-  paste0(base_dir, "experiment.txt"),
+  file.path(input_dir, "experiment.txt"),
   sep = "\t",
   header = TRUE
 )
 
-# Comprobar correspondencia entre counts y metadata
+# Check metadata structure
 
-stopifnot(all(colnames(Counts_matrix) %in% experiment$Sample))
+stopifnot(
+  all(c("Sample", "Treatment", "Colony") %in% colnames(experiment))
+)
 
-# Ordenar metadata según la matriz de counts
+stopifnot(!anyDuplicated(experiment$Sample))
+
+# Check correspondence between counts and metadata
+
+stopifnot(
+  setequal(colnames(counts_matrix), experiment$Sample)
+)
+
+# Reorder metadata to match the count matrix
 
 experiment <- experiment[
-  match(colnames(Counts_matrix), experiment$Sample),
+  match(colnames(counts_matrix), experiment$Sample),
   ,
   drop = FALSE
 ]
 
-stopifnot(identical(colnames(Counts_matrix), experiment$Sample))
+stopifnot(
+  identical(colnames(counts_matrix), experiment$Sample)
+)
 
-# Definir factores experimentales
+# Define experimental factors
 
 experiment$Treatment <- factor(
   experiment$Treatment,
@@ -61,51 +112,58 @@ experiment$Treatment <- factor(
 
 experiment$Colony <- factor(experiment$Colony)
 
-# Comprobar número de muestras por colmena y condición
+# Check sample distribution across colonies and treatments
 
 print(table(experiment$Colony, experiment$Treatment))
 
-# Comprobar que cada colmena tenga una muestra Before y una After
+# Confirm one sample per colony and treatment combination
 
 stopifnot(
   all(table(experiment$Colony, experiment$Treatment) == 1)
 )
 
-# =========================================================
-# 3. CONSTRUIR OBJETO DESEQ2 Y AJUSTAR EL MODELO
-# =========================================================
 
-# Diseño pareado:
-# Colony controla las diferencias entre colmenas.
-# Treatment estima el efecto Before vs After.
+# ============================================================
+# 3. CONSTRUCT DESEQ2 DATASET AND FIT THE MODEL
+# ============================================================
+
+# Experimental design:
+# Colony accounts for differences between colonies.
+# Treatment estimates the After vs Before contrast.
 
 dds <- DESeqDataSetFromMatrix(
-  countData = Counts_matrix,
+  countData = counts_matrix,
   colData = experiment,
   design = ~ Colony + Treatment
 )
 
-# Ajustar modelo mediante Wald test
+# Fit the negative binomial model using the Wald test
 
-dds <- DESeq(dds, test = "Wald")
+dds <- DESeq(
+  dds,
+  test = "Wald"
+)
 
-# Comprobar coeficientes del modelo
+# Inspect model coefficients
 
-resultsNames(dds)
+print(resultsNames(dds))
 
-# Comparación After vs Before
+# Define the coefficient for the After vs Before comparison
 
 coef_name <- "Treatment_After_vs_Before"
 
-# =========================================================
-# 4. ANALISIS DE EXPRESION DIFERENCIAL
-# =========================================================
+stopifnot(coef_name %in% resultsNames(dds))
 
-# Wald test convencional
-# H0: log2FC = 0
-# Sin umbral de log2FC
 
-res <- results(
+# ============================================================
+# 4. DIFFERENTIAL EXPRESSION ANALYSIS
+# ============================================================
+
+# Wald test:
+# Null hypothesis: log2FC = 0
+# No additional log2FC threshold
+
+res_wald <- results(
   dds,
   name = coef_name,
   alpha = alpha,
@@ -113,89 +171,132 @@ res <- results(
   cooksCutoff = TRUE
 )
 
-# =========================================================
-# 5. SHRINKAGE DE LOG2FC CON APEGLM
-# =========================================================
+# Display differential expression summary
 
-resLFC <- lfcShrink(
+summary(res_wald, alpha = alpha)
+
+
+# ============================================================
+# 5. LOG2 FOLD-CHANGE SHRINKAGE USING APEGLM
+# ============================================================
+
+# Estimate shrunken log2 fold changes using apeglm.
+# Adaptive prior estimation is disabled to avoid the
+# excessive shrinkage observed with apeAdapt = TRUE.
+
+res_apeglm <- lfcShrink(
   dds,
   coef = coef_name,
-  res = res,
-  type = "apeglm"
+  res = res_wald,
+  type = "apeglm",
+  apeAdapt = FALSE
 )
 
-# Incorporar estadísticos Wald a la tabla final
 
-resLFC$pvalue_Wald <- res$pvalue
-resLFC$padj_Wald <- res$padj
+# ============================================================
+# 6. INTEGRATE WALD AND APEGLM RESULTS
+# ============================================================
 
-# Resumen general de resultados
+# Create a unified results table.
+# Wald statistics are retained for differential expression
+# testing, while apeglm estimates are used for effect sizes.
 
-summary(res, alpha = alpha)
+res_final <- data.frame(
+  baseMean = res_wald$baseMean,
 
-# =========================================================
-# 6. EXPORTAR RESULTADOS COMPLETOS
-# =========================================================
+  # Original Wald estimates
+  log2FC_Wald = res_wald$log2FoldChange,
+  lfcSE_Wald = res_wald$lfcSE,
+  stat_Wald = res_wald$stat,
+  pvalue_Wald = res_wald$pvalue,
+  padj_Wald = res_wald$padj,
 
-res_final <- as.data.frame(resLFC)
+  # Shrunken estimates from apeglm
+  log2FC_apeglm = res_apeglm$log2FoldChange,
+  lfcSD_apeglm = res_apeglm$lfcSE,
+
+  row.names = rownames(res_wald)
+)
+
+# Count significant differentially expressed genes
+
+n_DEGs <- sum(
+  !is.na(res_final$padj_Wald) &
+    res_final$padj_Wald < alpha
+)
+
+cat("Number of differentially expressed genes:", n_DEGs, "\n")
+
+
+# ============================================================
+# 7. EXPORT COMPLETE DIFFERENTIAL EXPRESSION RESULTS
+# ============================================================
 
 write.table(
   res_final,
-  file = paste0(base_dir, "Deseq2_statistics.txt"),
+  file = file.path(output_dir, "Deseq2_statistics.txt"),
   sep = "\t",
-  dec = dec_out,
+  dec = ".",
   row.names = TRUE,
   col.names = NA,
   quote = FALSE
 )
 
-# =========================================================
-# 7. IDENTIFICACION Y EXPORTACION DE DEGS
-# =========================================================
 
-# Criterio: adjusted p-value < 0.05
-# Corrección Benjamini-Hochberg
-# Sin umbral adicional de log2FC
+# ============================================================
+# 8. IDENTIFICATION AND EXPORT OF DEGs
+# ============================================================
+
+# DEG selection criterion:
+# Benjamini-Hochberg adjusted Wald p-value < 0.05
+# No additional log2FC threshold.
 
 degs <- res_final[
   !is.na(res_final$padj_Wald) &
     res_final$padj_Wald < alpha,
+  ,
+  drop = FALSE
 ]
 
-# Clasificar genes según dirección de expresión
+# Classify regulation using shrunken log2FC estimates
 
 degs$Regulation <- ifelse(
-  degs$log2FoldChange > 0,
+  degs$log2FC_apeglm > 0,
   "Up_in_After",
   "Up_in_Before"
 )
 
-# Ordenar por adjusted p-value
+# Order DEGs by adjusted p-value
 
-degs <- degs[order(degs$padj_Wald), ]
+degs <- degs[
+  order(degs$padj_Wald),
+  ,
+  drop = FALSE
+]
 
-# Número de genes por dirección de regulación
+# Display the number of genes in each regulation category
 
 print(table(degs$Regulation))
 
-# Exportar DEGs
+# Export DEG results
 
 write.table(
   degs,
-  file = paste0(base_dir, "DEGs_After_vs_Before.txt"),
+  file = file.path(output_dir, "DEGs_After_vs_Before.txt"),
   sep = "\t",
-  dec = dec_out,
+  dec = ".",
   row.names = TRUE,
   col.names = NA,
   quote = FALSE
 )
 
-# =========================================================
-# 8. MA PLOT
-# =========================================================
+
+# ============================================================
+# 9. MA PLOT
+# ============================================================
 
 tiff(
-  paste0(base_dir, "MAplot_DESeq2.tif"),
+  file.path(output_dir, "MAplot_DESeq2.tif"),
   width = 15,
   height = 15,
   units = "cm",
@@ -205,23 +306,29 @@ tiff(
 )
 
 plotMA(
-  resLFC,
+  res_apeglm,
   alpha = alpha,
   ylim = c(-10, 10),
   main = "After vs Before",
   cex = 0.6
 )
 
-abline(h = 0, col = "blue", lty = 2)
+abline(
+  h = 0,
+  col = "blue",
+  lty = 2
+)
 
 dev.off()
 
-# =========================================================
-# 9. TRANSFORMACION RLOG
-# =========================================================
 
-# blind = TRUE: transformación independiente del diseño
-# experimental, destinada al análisis exploratorio.
+# ============================================================
+# 10. RLOG TRANSFORMATION
+# ============================================================
+
+# Apply regularized log transformation for exploratory analyses.
+# blind = TRUE estimates the transformation independently
+# of the experimental design.
 
 rlog_data <- rlogTransformation(
   dds,
@@ -229,13 +336,13 @@ rlog_data <- rlogTransformation(
   fitType = "parametric"
 )
 
-# Exportar valores transformados
+# Export transformed expression values
 
 write.table(
   data.frame(assay(rlog_data)),
-  file = paste0(base_dir, "RLOG_Transformed_values.txt"),
+  file = file.path(output_dir, "RLOG_Transformed_values.txt"),
   sep = "\t",
-  dec = dec_out,
+  dec = ".",
   row.names = TRUE,
   col.names = NA,
   quote = FALSE
