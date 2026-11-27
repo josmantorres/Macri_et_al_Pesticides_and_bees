@@ -8,13 +8,7 @@ The analysis was performed using **DESeq2**, accounting for the paired experimen
 
 ## Experimental Design
 
-The experiment included samples collected from three independent bee colonies (C1, C3, and C5) at two time points:
-
-- **Before:** samples collected prior to treatment application.
-- **After:** samples collected following treatment application.
-
-Each biological sample consisted of a pool of 10 bee brains. Therefore, the experimental unit was the colony, rather than the individual bee.
-
+The experiment included three independent bee colonies (C1, C3, and C5), each sampled before and after the combined fungicide and pesticide application. Each biological sample consisted of a pool of 10 bee brains. Thus, the colony was considered the experimental unit, with three biological replicates per sampling condition. The same colonies were sampled at both time points, although the individual bees used for each sampling were not necessarily the same.
 The experimental design comprised three biological pairs (three colonies sampled at both time points), resulting in six RNA-seq libraries.
 
 Because the same colonies were sampled before and after treatment, colony identity was included in the DESeq2 model to account for between-colony variability.
@@ -105,9 +99,8 @@ The analysis included the following steps:
 1. Import and preparation of the raw count matrix and sample metadata.
 2. Construction of a DESeq2 dataset using the paired experimental design.
 3. Differential expression analysis using the Wald test.
-4. Estimation of moderated log2 fold changes using the `apeglm` shrinkage method.
-5. Adjustment of p-values for multiple testing using the Benjamini–Hochberg procedure.
-6. Identification and export of differentially expressed genes.
+4. Estimation of shrunken log2 fold changes using the apeglm method. Log2 fold changes were shrunk using apeglm with apeAdapt = FALSE, while statistical significance was assessed using the original Wald test p-values adjusted with the Benjamini–Hochberg procedure.
+5. Identification and export of differentially expressed genes.
 
 Genes with an adjusted p-value (`padj`) below 0.05 were considered differentially expressed.
 
@@ -143,9 +136,10 @@ install.packages(c(
 ## Running the Analysis
 
 1. Clone or download this repository.
-2. Place `Raw_counts.txt`, `experiment.txt`, and `DESeq2_analysis.R` in the same working directory.
-3. Open the R script and update the input/output directory (`base_dir`) to match your local directory.
-4. Run the script in R or RStudio.
+2. Ensure that the input files are located in the input/ directory.
+3. Open the DESeq2_analysis.R script located in the scripts/ directory.
+4. Set the working directory to the repository root.
+5. Run the script in R or RStudio.
 
 The script automatically imports the count matrix and metadata, checks sample correspondence, fits the DESeq2 model, and exports the results.
 
