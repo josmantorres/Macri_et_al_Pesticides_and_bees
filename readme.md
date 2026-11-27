@@ -23,14 +23,22 @@ Because the same colonies were sampled before and after treatment, colony identi
 
 ```
 .
-├── input/
 │   ├── Raw_counts.txt
-│   └── experiment.txt
+│   ├── experiment.txt
+│   ├── GO_annotations.txt
+│   └── DESeq2_raw_pvalues.txt
+│
 ├── scripts/
 │   └── DESeq2_analysis.R
+│   └── GO_ enrichment_ analysis
+│
 ├── output/
 │   ├── Deseq2_statistics.txt
-│   └── RLog_values.txt
+│   ├── RLog_values.txt
+│   ├── GSR_pvalue_BP.txt
+│   ├── GSR_pvalue_MF.txt
+│   └── GSR_pvalue_CC.txt
+│
 ├── README.md
 └── LICENSE
 ```
